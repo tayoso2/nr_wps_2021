@@ -1,0 +1,190 @@
+---
+title: "Possessions Data Review"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+**The problem with Possessions Data**
+ 
+
+
+load ellipse data(join w/o with mst workorder)
+
+
+**Mitigation Plan**
+
+* Convert the Free text Track ID (DOWN/DOWN SOUTH) into numeric track ids like 2100.
+
+
+
+
+```{r libs, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+rm(list = ls())
+library(httr)
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(knitr)
+
+```
+
+
+
+**A view of the datasets which describe resources working on a possession**
+
+Plan is to use the Delivery Units to identify the "resources with competences" that can work on certain standard jobs. We also need the endorsement mapping with the standard jobs. Either this or the above will serve as the missing key to the standard jobs. Some of the important columns are displayed in the table below.
+
+
+```{r simple prob, echo=FALSE,message=FALSE, warning = FALSE}
+
+# Read data in -----
+
+ellipse_wo_bd <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Work Orders/Ellipse Workorders.xlsx",
+    sheet = "Backlog Detail",
+    range = "A1:Z1452"
+  )
+
+ellipse_wo_d <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Work Orders/Ellipse Workorders.xlsx",
+    sheet = "Detail",
+    range = "A1:AK1459"
+  )
+
+ellipse_mst_wo_620 <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Work Orders/Ellipse MST Work Orders_10.xlsx",
+    sheet = "open MSF620 rows",
+    range = "A1:FG2501"
+  )
+
+ellipse_adhoc_wo_620 <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Work Orders/Ellipse Ad hoc Work Orders_10.xlsx",
+    sheet = "open MSF620 rows",
+    range = "A1:FG2501"
+  )
+
+
+# select necessary columns
+ellipse_wo_bd_1 <- ellipse_wo_bd %>%
+  select(
+    `Type of Work Order`,
+    `Work Order`,
+    `Work Order Description`,
+    `Asset No`,
+    `Asset Description1`,
+    ELR,
+    `Track ID`,
+    `Mileage From`,
+    `Mileage To`,
+    `Work Order Task No`,
+    `Task Description`,
+    `Required Finished Date`,
+    `Planned Start Date`,
+    `Est Labour Hours`,
+    `MST Number`
+  )
+
+ellipse_wo_d_1 <- ellipse_wo_d %>%
+  select(
+    `Type of Work Order`,
+    `Work Order`,
+    `Work Order Description`,
+    `Asset No`,
+    `Asset Description1`,
+    ELR,
+    `Track ID`,
+    `Mileage From`,
+    `Mileage To`,
+    `Work Order Task No`,
+    `Task Description`,
+    `Required Finished Date`,
+    `Planned Start Date`,
+    `Est Labour Hours`,
+    `MST Number`
+  )
+
+ellipse_mst_wo_620_1 <- ellipse_mst_wo_620 %>%
+  select(
+    WORK_ORDER,
+    EQUIP_NO,
+    SJ_DSTRCT_CODE,
+    STD_JOB_NO,
+    UNITS_REQUIRED,
+    UNIT_OF_WORK,
+    UOW_RATE,
+    WORK_GROUP,
+    WO_DESC
+  )
+
+
+ellipse_adhoc_wo_620_1 <- ellipse_adhoc_wo_620 %>%
+  select(
+    WORK_ORDER,
+    EQUIP_NO,
+    SJ_DSTRCT_CODE,
+    STD_JOB_NO,
+    UNITS_REQUIRED,
+    UNIT_OF_WORK,
+    UOW_RATE,
+    WORK_GROUP,
+    WO_DESC
+  )
+
+# kable(tail(track_eng_competency_data_2), caption = "Competencies")
+# kable(head(abp_list_data_2), caption = "Standard Jobs")
+```
+
+
+There is no overlapping w/o in adhoc/mst and wo. However, with the ELR, we can join both the w/o data and the possessions data.
+
+
+```{r simple ouptut, echo=FALSE, message=FALSE, warning = FALSE}
+
+# merge both datasets
+both_wo <- rbind(ellipse_wo_d_1,ellipse_wo_bd_1)
+adhoc_mst_wo <- rbind(ellipse_mst_wo_620_1,ellipse_adhoc_wo_620_1)
+both_wo %>% 
+  inner_join(adhoc_mst_wo, by = c("Work Order"="WORK_ORDER"))
+
+kable(head(abp_list_data_3), caption = "Standard Jobs with additional columns")
+
+```
+
+
+```{r simple ouptut, echo=FALSE, message=FALSE, warning = FALSE}
+# bring in possessions
+
+ellipse_po_ws <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Work Orders/Ellipse_Possessions_Worksites.xlsm",
+    sheet = "CSV02-v",
+    range = "A1:AR4503"
+  )
+
+
+ellipse_po_ws_1 <- ellipse_po_ws %>%
+  select(
+    BusinessPossRef...1,
+    PossessionManager,
+    ToMonth,
+    ElrFrom,
+    LorFrom,
+    LocationFrom,
+    ElrTo,
+    LorTo,
+    LocationTo,
+    DistanceFrom,
+    DistanceTo
+  )
+
+```

@@ -1,0 +1,137 @@
+---
+title: "Possessions Data Cleaning"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+**The problem with Possessions Data**
+ 
+As seen in the document Arunava shared last week.
+
+* Asset ID Mismatch
+
+* Track ID Mismatch
+
+* Unavailability of Start & END ELRs of each lines blocked within Possession
+
+
+**Mitigation Plan**
+
+* Convert the Free text Track ID (DOWN/DOWN SOUTH) into numeric track ids like 2100.
+
+* Convert the local asset names/signals (E425#) into numeric Asset IDs like 000123456 for each end of all the lines blocked within the Possession. 
+
+* Provide details of all the lines blocked within a Possession, with the ELR against the start and end points for each of the lines blocked within the Possession.
+
+**Current Status**
+
+* Discussions in Progress with PPS team & APP program . Issues has been explained to them and same has been acknowledged.
+
+* PPS  need to add new data elements at their end to accommodate the new data format , but the timelines might not be as per our requirement.
+
+* As a work around , till PPS makes the changes at their end, we might need to work with the Routes , to manually convert the Possessions data for a defined period , into a format which is usable by us and use them for the pilot run. 
+
+* Once PPS makes the required changes at their end, we expect to get the data in the required format from then on.
+
+
+
+```{r libs, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+rm(list = ls())
+library(httr)
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(knitr)
+
+```
+
+
+
+**A view of the datasets which describe resources working on a possession**
+
+Plan is to use the Delivery Units to identify the "resources with competences" that can work on certain standard jobs. We also need the endorsement mapping with the standard jobs. Either this or the above will serve as the missing key to the standard jobs. Some of the important columns are displayed in the table below.
+
+
+```{r simple prob, echo=FALSE,message=FALSE, warning = FALSE}
+
+# Read data in -----
+
+abp_list_data <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Data from Akio/ABP List of Std Jobs with II Planning Info.xlsx",
+    sheet = "Standard Job List",
+    range = "A2:AB5949"
+  )
+
+track_eng_competency_data <-
+  read_excel(
+    "D:/Desktop/Network Rail WPS/Data from Akio/Sample competency data/Track eng Who has this competence 20200406.xlsx",
+    sheet = "Sheet1",
+    range = "A1:AF55099"
+  )
+
+
+# select necessary columns
+track_eng_competency_data_2 <- track_eng_competency_data %>%
+  select(
+    `Employee Number`,
+    Competence,
+    Endorsement,
+    Status,
+    `Date From`,
+    `Valid Until`,
+    `Supervisor Employee Number`,
+    Route,
+    `Delivery Unit`,
+    Area
+  )
+
+abp_list_data_2 <- abp_list_data %>%
+  select(
+    `STD JOB DESC`,
+    CREW_SIZE, # number of works
+    CALC_LAB_HRS, # total number of work hours
+    ACTIVE,
+    STD_JOB_NO,
+    STD_JOB_TASK,
+    CFW,
+    MNTCODE,
+    `MNT DESCRIPTION`,
+    `UNIT OF WORK`,
+    `UNITS REQUIRED`,
+    `CONVERSION FACTOR`,
+    `Protection Required`,
+    ASSET_CHANGE
+  )
+
+
+kable(tail(track_eng_competency_data_2), caption = "Competencies")
+kable(head(abp_list_data_2), caption = "Standard Jobs")
+```
+
+
+The number of labour hours and crew/gang size can help plan the roster. We currently don't have a link between the Competencies and the Standard jobs, hence its impossible with the current data to plan resources undertaking jobs. If we add new columns ("Delivery Unit" and "Endorsement") to the Standard Jobs dataset so that we know what crew is needed (with the DU assisting with the specific location targeting) and/or the Endorsement so we know what skills are required.
+
+
+```{r simple ouptut, echo=FALSE, message=FALSE, warning = FALSE}
+
+# replicate the addition of DU and Endorsements
+## DU
+resource_DU <- unique(track_eng_competency_data_2$`Delivery Unit`)
+DU <- rep(c(resource_DU),each = 1, length = nrow(abp_list_data_2))
+abp_list_data_3 <- mutate(abp_list_data_2, DU = DU)
+
+## Endorsements
+resource_endorsement <- unique(track_eng_competency_data_2$Endorsement)
+endorsement <- rep(c(resource_endorsement),each = 1, length = nrow(abp_list_data_2))
+abp_list_data_3 <- mutate(abp_list_data_3, endorsement = endorsement)
+
+kable(head(abp_list_data_3), caption = "Standard Jobs with additional columns")
+
+```

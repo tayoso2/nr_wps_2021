@@ -1,0 +1,688 @@
+---
+title: "Basic Job Optimisation"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+**The problem**
+ 
+Jobs - Need a number of skills to complete each which require a number a workforce hours over a number of days
+ 
+Workforce - Will have hours which they can work each day and one or more skills which they can perform
+
+**Acceptance Testing**
+
+* up to 300 jobs
+
+* how much workforce?
+
+
+```{r libs, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+rm(list = ls())
+
+library(lpSolveAPI)
+
+library(tidyverse)
+
+```
+
+
+**Lp Solve Ideas**
+
+basic ideas of framing the problem to LP solve 
+
+* its binary
+* the decision being made is do or not do the job
+* bounds would be the ammount of hours available in each skill group
+* goal 1 - would be min/max job priority depending on how folk see priority
+* goal 2 - use all the workforce each day regardless of prioity
+* how do we mix the goals together as both are valid, what if their prioirty system is super basic creating similar decisions i.e. 1/2
+* how do we penalise the optimisation for using workers that are multiple skilled
+
+
+**Simple Problem**
+
+firstly coding directly into LP solve
+
+3 jobs 
+
+* req 7.5 hours of skill 1 and 7.5 hours of skill 2 prioirty 2
+* req 7.5 hours of skill 1 and 7.5 hours of skill 2 prioirty 1
+* req 7.5 hours of skill 2 prioity 2
+
+prioirty high = good, goal is a max
+
+if there are only 
+
+* 7.5 hours of skill 1 
+* 15 hours of skill 2 available
+
+should pick jobs 1 and 3
+
+```{r simple prob, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+#create model
+#bounds, decisions
+lp <- lpSolveAPI::make.lp(2, 3)
+
+cols <- c("job1", "job2", "job3")
+rows <- c("s1", "s2")
+dimnames(lp) <- list(rows, cols)
+
+set.column(lp, 1, c(7.5, 7.5), indices = c(1,2))
+set.column(lp, 2, c(7.5, 7.5), indices = c(1,2))
+set.column(lp, 3, c(0, 7.5), indices = c(1,2))
+
+#the problems is binary
+lpSolveAPI::set.type(lp, 1:3, "binary")
+
+lpSolveAPI::set.constr.type(lp, c("<=", "<="))
+
+lpSolveAPI::set.constr.value(lp, c(7.5, 15))
+
+lpSolveAPI::set.objfn(lp, c(2,1,2))
+  
+lpSolveAPI::lp.control(lp, sense = "max")
+
+lp
+
+model <- solve(lp)
+
+model
+
+lpSolveAPI::get.variables(lp)
+
+
+```
+
+done, easy!
+
+```{r simple ouptut, echo=FALSE, message=FALSE, warning = FALSE}
+
+lp
+
+model <- solve(lp)
+
+model
+
+lpSolveAPI::get.variables(lp)
+
+
+```
+
+**What if there is a multi skill worker?**
+
+same 3 jobs:
+
+* req 7.5 hours of skill 1 and 7.5 hours of skill 2 prioirty 2
+* req 7.5 hours of skill 1 and 7.5 hours of skill 2 prioirty 1
+* req 7.5 hours of skill 2 prioity 2
+
+workers are now:
+
+* worker 1 has 7.5 hours of skill 1 or 2
+* workers 2 and 3 can only do skill 2
+
+should still be same answer but need to account for that worker 1 can do all 3 jobs
+
+first just the first 2 jobs so can see the model on screen
+
+
+```{r multi skill, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+#create model
+lp <- lpSolveAPI::make.lp(nrow = 5, ncol = 6)
+
+
+cols <- c("j1", "j1_s1_s1", "j1_s2_s12", "j1_s2_s2", 
+          "j2", "j2_s1_s1", "j2_s2_s12", "j2_s2_s2")
+rows <- c("s12", "s2", 
+          "job1_s2", "job1", 
+          "job2_s2", "job2")        
+          
+lp <- lpSolveAPI::make.lp(nrow = length(rows), ncol = length(cols))
+
+dimnames(lp) <- list(rows, cols)
+
+
+#first decision is NOT doing the job
+set.column(lp, 1, c(2), indices = c(4))
+
+
+#first decision is job 1 skill 1, only 1 person can do this
+set.column(lp, 2, c(7.5, 1), indices = c(1,4))
+
+
+#next 2 decisions are job 1 skill 1/2 and skill 2
+#technically if there was only 1 person to do skill 1 2 decisions would not be needed
+set.column(lp, 3, c(7.5, 0, 1, 1), indices = c(1,2,3,4))
+set.column(lp, 4, c(0, 7.5, 1, 1), indices = c(1,2,3,4))
+
+
+#job 2 is a repeat of job 1
+
+set.column(lp, 5 , c(2), indices = c(6))
+
+set.column(lp, 6, c(7.5, 1), indices = c(1,6))
+
+set.column(lp, 7, c(7.5, 0, 1, 1), indices = c(1,2,5,6))
+set.column(lp, 8, c(0, 7.5, 1, 1), indices = c(1,2,5,6))
+
+
+#the problems is binary
+lpSolveAPI::set.type(lp, 1:length(cols), "binary")
+
+
+
+
+lpSolveAPI::set.constr.type(lp, 
+                            types = c("<=", "<=", 
+                                      "<=", "=", 
+                                      "<=", "="))
+                                      
+                                     # "<="))#, 
+                                      #"<=", "="))
+
+
+lpSolveAPI::set.constr.value(lp, rhs = c(7.5, 15, 
+                                         1, 2, 
+                                         1, 2)) # , 
+                                         #1, 2))
+
+
+
+lpSolveAPI::set.objfn(lp, c(0,1,1,1,
+                            0,0.5,0.5,0.5))
+                            
+                          #  ,
+                          #  0,0.2,0.2,0.2))
+
+lpSolveAPI::lp.control(lp, sense = "max")
+
+model <- solve(lp)
+
+model
+
+lpSolveAPI::get.variables(lp)
+
+lp
+
+
+```
+
+The structure is
+
+* each decision represents matching the required skill of the job to the skill groups available from the workforce
+* if there is only 1 match e.g. you need Skill 1 and there is only 1 group of people who can do Skill 1 then this is 1 decision as seen below with j1_s1_s1 and j2_s1_s1, this is either on or off
+* where there are 2 or more groups of people that can satisfy the required skill each one is represented as a decision and they are bounded so that only one can be selected e.g. j1_s2_s12 and j1_s2_s2 bounded by job1_s2 being <= 1 
+* where multiple skills are required for a job, a further decision is added for NOT doing the job and a bound is added that it has to pick not doing or doing the job. below bound job1 ensures that either the job is not done (with a goal of 0) it is done which is a combination of j1_s1_s1 + j1_s2_s12 or j1_s1_s1 + j1_s2_s2. This bound is set as = to the total number of skills required to do the job which in the below example is 2.
+
+
+```{r multi skill output 1, echo=FALSE, message=FALSE, warning = FALSE}
+
+lp
+
+```
+
+does pick the correct decisions, but the output is quite confusing, at moment you need to match the 1's and 0's to the above columns
+
+```{r multi skill output 2, echo=FALSE, message=FALSE, warning = FALSE}
+
+model <- solve(lp)
+
+model
+
+lpSolveAPI::get.variables(lp)
+
+
+```
+
+**Creating a basic function to create the model from input data**
+
+```{r create basic functions, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+jobs <- tibble(J_ID = c(1,2), Priority = c(2,1) )
+
+jobs_skills <- tibble(J_ID = c(1,1,2,2), Skill = c("S1","S2","S1","S2"), Hours = c(7.5,7.5,7.5,7.5) )
+
+worker_skills <- tibble(E_ID = c(1,1,2,3), Skill = c("S1","S2","S2","S2"))
+
+worker_hours <- tibble(E_ID = c(1,2,3), Hours = c(7.5, 7.5,7.5))
+
+
+create_model_data <- function(jobs, jobs_skills, worker_skills, worker_hours){
+  
+  #first need to create how much of each type of skill is available
+
+  ###### should be done on data load in app????? ---------------------------
+
+  # number each available skill
+  skills_id <- worker_skills %>%
+    distinct(Skill) %>%
+    rowid_to_column("S_ID")
+
+  # apply numbering to worker skills table
+  worker_skills <- left_join(worker_skills, skills_id, by = "Skill") %>%
+    group_by(E_ID) %>%
+    mutate(S_ID_G = paste0(S_ID, collapse = "")) %>%
+    mutate(S_ID_G = paste0("S", S_ID_G)) %>%
+    ungroup()
+  
+  ################ function would start here
+  
+  #get bounds on worker skills
+  model_bounds_worker <- worker_skills %>%
+    left_join(worker_hours, by = "E_ID") %>%
+    distinct(E_ID, S_ID_G, Hours) %>%
+    group_by(S_ID_G) %>%
+    summarise(Value = sum(Hours)) %>%
+    mutate(B_ID = row_number())
+  
+  model_bounds_value <- model_bounds_worker$Value
+  model_bounds_type <- rep("<=", nrow(model_bounds_worker))
+  
+  
+  #get all the possible worker skill combos
+  worker_skills_combo <- distinct(worker_skills, S_ID, S_ID_G)
+  
+  #apply skills and worker skills combos to all jobs
+  model_columns <- jobs_skills %>%
+    left_join(skills_id, by = "Skill") %>%
+    left_join(worker_skills_combo, by = "S_ID") %>%
+    rename(Value = Hours)
+  
+  #add bound id for skill to each model column
+  model_columns <- model_columns %>%
+    left_join( select(model_bounds_worker, S_ID_G, B_ID), by = "S_ID_G" )
+  
+  
+  # does the job require a do not do decision as there are multiple skills required ------------------------
+  # also create a B_ID_J so that the bound can be placed in the correct position
+  multiple_options_all <- model_columns %>%
+    group_by(J_ID, S_ID) %>%
+    summarise(count = n()) %>%
+    ungroup()
+  
+  multiple_options <- multiple_options_all %>%
+     group_by(J_ID) %>%
+     summarise(max = n()) %>%  #the total number which needs to be picked
+     filter(max >= 2) %>%
+     rowid_to_column("B_ID_J") %>%
+     mutate(
+        B_ID_J = B_ID_J + max(model_bounds_worker$B_ID)
+     )
+    
+  # create a column for each do not pick option
+  model_columns_dn <- group_by(model_columns, J_ID) %>% filter(row_number()==1) %>%
+    right_join(multiple_options, by = "J_ID") %>%
+    mutate(Value = max,
+           S_ID = 0,
+           Skill = "",
+           S_ID_G = 0,
+           B_ID = 0) %>%
+    select(-max, - B_ID_J) %>%
+    ungroup()
+    
+  # add back into main column data
+  model_columns <- rbind(model_columns, model_columns_dn) %>%
+    arrange(J_ID, S_ID_G)
+  
+  
+  # extra bounds required to act of the whole job being selected
+  model_columns <- model_columns %>%
+    left_join(select(multiple_options, J_ID, B_ID_J), by = "J_ID" )
+  
+  #update bound strings
+  model_bounds_value <- c(model_bounds_value, multiple_options$max)
+  model_bounds_type <- c(model_bounds_type, rep("=", nrow(multiple_options)))
+  
+  
+  #do any bounds need adding so that only 1 of the options based on skills can be selected? --------------
+  multiple_options <- multiple_options_all %>%
+    filter(count >=2) %>%
+    select(-count) %>%
+    rowid_to_column("B_ID_JS") %>%
+    mutate(
+      B_ID_JS = B_ID_JS + max(model_columns$B_ID_J, na.rm = TRUE)
+    )
+  
+  
+  model_columns <- model_columns %>%
+    left_join(multiple_options, by = c("J_ID", "S_ID")) %>%
+    replace(is.na(.), 0)
+  
+  model_bounds_type_temp <- rep("<=", nrow(multiple_options))
+  
+  model_bounds_value <- c(model_bounds_value, rep(1, length(model_bounds_type_temp)))
+  model_bounds_type <- c(model_bounds_type, model_bounds_type_temp)
+  
+  
+  #create final id for the columns
+  model_columns <- model_columns %>%
+    rowid_to_column("C_ID")
+  
+  
+  # add goal as a column
+  model_columns <- model_columns %>%
+    left_join(jobs, by = "J_ID" )
+  
+  # if there is a do not pick position change priority to 0
+  model_columns <- model_columns %>%
+    mutate(
+      Priority = ifelse(S_ID == 0, 0 , Priority)
+    )
+
+  
+  return( 
+    list(
+      model_columns = model_columns,
+      model_bounds_value = model_bounds_value,
+      model_bounds_type = model_bounds_type
+    )
+  )
+  
+  
+}
+
+
+run_model <- function(model_data_list, model_return = FALSE){
+
+  # create model 
+  model_columns <- model_data_list$model_columns
+  
+  columns <- nrow(model_columns)
+
+  rows <- max(model_columns$B_ID_JS)
+
+  lp <- lpSolveAPI::make.lp(nrow = rows, ncol = nrow(model_columns))
+  
+  for(i in 1:columns){
+  
+    col <- model_columns[i,]
+  
+    # get all positions
+    position <- c(col$B_ID, col$B_ID_J, col$B_ID_JS)
+  
+    # remove zeros
+    position <- position[position!=0]
+  
+    # create a vector of 1's based on the numbee of positons
+    # all positions apart from the first are just 1's
+    values <- rep( 1, length(position) )
+  
+    # replace the first value with the value from the column
+    # if this is the do not pick position it will be the number that has to be picked
+    #if it is a work option it will be number of hours
+    values[1] <- col$Value
+  
+    set.column(lp, col$C_ID, values, indices = position)
+  
+  }
+  
+  #the problems is binary
+  lpSolveAPI::set.type(lp, 1:columns, "binary")
+
+  lpSolveAPI::set.constr.type(lp, 
+                            types = model_data_list$model_bounds_type)
+                                      
+
+  lpSolveAPI::set.constr.value(lp, rhs = model_data_list$model_bounds_value)
+
+
+  lpSolveAPI::set.objfn(lp, model_columns$Priority)
+
+
+  lpSolveAPI::lp.control(lp, sense = "max")
+
+
+  model <- solve(lp)
+  
+  if (!model_return) {
+    lp <- ""
+  }
+  
+  results <-  lpSolveAPI::get.variables(lp) 
+  
+  model_columns <- cbind(model_columns, results)
+
+  return(
+    list(
+      model_columns = model_columns,
+      lp = lp
+    )
+  )
+    
+}
+
+
+```
+
+data looks like this
+
+jobs have 2 files
+
+first the jobs themselves, unique id and a priority
+
+```{r jobs, echo=FALSE, message=FALSE, warning = FALSE}
+
+jobs
+
+```
+
+second the skills and hours that are required for each job
+
+```{r jobs skills, echo=FALSE, message=FALSE, warning = FALSE}
+
+jobs_skills
+
+```
+
+for the workers there are also 2 files
+
+first for each worker how many hours do they have
+
+```{r worker_hours, echo=FALSE, message=FALSE, warning = FALSE}
+
+worker_hours
+
+```
+
+second, what skills does each worker have
+
+```{r worker_skills, echo=FALSE, message=FALSE, warning = FALSE}
+
+worker_skills
+
+```
+
+model looks the same
+
+everything has been added programatically so there are some differences
+
+the names of the columns and rows have been added to help understanding
+
+* decisions are still in the same order left to right
+* rows (bounds) are in the order skills, jobs, skills within jobs
+
+
+```{r function output, echo=FALSE, message=FALSE, warning = FALSE}
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+lp <- results$lp
+
+
+cols <- c("j1", "j1_s1_s1", "j1_s2_s12", "j1_s2_s2", 
+          "j2", "j2_s1_s1", "j2_s2_s12", "j2_s2_s2")
+rows <- c("s12", "s2", 
+          "job1", "job2",
+          "job1_s2", "job2_s2" )        
+          
+dimnames(lp) <- list(rows, cols)
+
+lp
+
+```
+
+and so do the results in that it picks job 1
+
+```{r multi skill output results, echo=FALSE, message=FALSE, warning = FALSE}
+
+results$model_columns$results
+
+```
+
+using a super quick basic graphing function
+
+```{r basic graph, echo=FALSE,message=FALSE, warning = FALSE, results = 'hide'}
+
+
+quick_graph <- function(worker_hours, results_table){
+
+  #super quick (shit) function to visualise results
+  results_table <- results_table %>%
+    filter(results == 1, Skill != "") %>%
+    group_by(group) %>%
+    summarise(Value = sum(Value)) %>%
+    mutate(day = "Today")
+  
+  worker_hours_table <- worker_hours %>%
+    mutate(day = "Today") %>%
+    group_by(day) %>%
+    summarise(Value = sum(Hours))
+  
+  plot <- ggplot(results_table, aes(day, Value))
+  
+  plot <- plot + geom_bar(aes(fill=group), width = 0.5, stat="identity") + 
+    labs(title="Summary") +
+    geom_point(aes(x=worker_hours_table$day, y=worker_hours_table$Value), stat="identity", size = 4)
+
+  return(plot)
+    
+}
+
+quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+
+same problem as before but with 3 jobs, should pick jobs 1 and 3
+
+```{r}
+
+
+jobs <- tibble(J_ID = c(1,2,3), Priority = c(2,1,2) )
+ 
+jobs_skills <- tibble(J_ID = c(1,1,2,2,3), Skill = c("S1","S2","S1","S2","S2"), Hours = c(7.5,7.5,7.5,7.5,7.5) )
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+#quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+
+add in someone who can only do skill 1 and someone who can do S2/S3. should mean all 3 jobs can now be done
+
+```{r}
+
+
+worker_hours <- tibble(E_ID = c(1,2,3,4,5), Hours = c(7.5, 7.5, 7.5, 7.5, 7.5))
+
+worker_skills <- tibble(E_ID = c(1,1,2,3,4,5,5), Skill = c("S1","S2","S2","S2","S1","S2","S3"))
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+#quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+
+add in another job with high priority that requires S3
+
+job 2 is serviced by someone who can do S1 and S2/S3 
+
+so a higher priority job that requires S3 means that job 2 drops out
+
+maybe need to think about configuring the bounds to favour a mix of high priority/filling all jobs
+
+```{r}
+
+jobs <- tibble(J_ID = c(1,2,3,4), Priority = c(2,1,2,2) )
+ 
+jobs_skills <- tibble(J_ID = c(1,1,2,2,3,4), Skill = c("S1","S2","S1","S2","S2","S3"), Hours = c(7.5,7.5,7.5,7.5,7.5,7.5) )
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+#quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+
+test with 3 skills required for one job, job 1 now requires skill 3 so its a higher priority than the previously added job 4 above so now should pick jobs 1 and 3.
+
+```{r}
+
+jobs <- tibble(J_ID = c(1,2,3,4), Priority = c(2,1,2,2) )
+ 
+jobs_skills <- tibble(
+  J_ID = c(1,1,2,2,3,4,1), 
+  Skill = c("S1","S2","S1","S2","S2","S3","S3"), 
+  Hours = c(7.5,7.5,7.5,7.5,7.5,7.5,7.5) 
+  )
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+#quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+
+add job 5 thats of a lower priority but requires skill 1 so will plug the gap and now pick jobs 1,3 and 5
+
+```{r}
+
+jobs <- tibble(J_ID = c(1,2,3,4,5), Priority = c(2,1,2,2,1) )
+ 
+jobs_skills <- tibble(
+  J_ID = c(1,1,2,2,3,4,1,5), 
+  Skill = c("S1","S2","S1","S2","S2","S3","S3","S1"), 
+  Hours = c(7.5,7.5,7.5,7.5,7.5,7.5,7.5,7.5) 
+  )
+
+model_data_list <- create_model_data(jobs, jobs_skills, worker_skills, worker_hours)
+
+results <- run_model(model_data_list, TRUE)
+
+#quick_graph(worker_hours, mutate(results$model_columns, group = Skill))
+
+quick_graph(worker_hours, mutate(results$model_columns, group = paste0("Job", J_ID)))
+
+
+```
+

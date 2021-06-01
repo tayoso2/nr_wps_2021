@@ -207,9 +207,7 @@ This key can be used to merge with the People data.
 
 #### Roster data
 
-The Roster data is not in a format that is useful to Arcadis Gen. The Roster data will have to be repackaged in a way that we can pre-process without much hassle. One of such datasets can be found 
-
-[here]: https://arcadiso365.sharepoint.com/:x:/r/teams/NRALPWPSPrivate/Shared%20Documents/General/02%20Project%20Delivery/01%20ALP%20+%20WPS%20-%20Common%20Delivery%20Aspects/03%20Data/WPS/Data%20from%20Akio/Western/Copy%20of%20Template%2023_Roster.xlsx?d=wf68f20e555ff4d49a7761eaf4fdaec52&amp;csf=1&amp;web=1&amp;e=i9BBGg	"here"
+The Roster data is not in a format that is useful to Arcadis Gen. The Roster data will have to be repackaged in a way that we can pre-process without much hassle. One of such datasets can be found here https://arcadiso365.sharepoint.com/:x:/r/teams/NRALPWPSPrivate/Shared%20Documents/General/02%20Project%20Delivery/01%20ALP%20+%20WPS%20-%20Common%20Delivery%20Aspects/03%20Data/WPS/Data%20from%20Akio/Western/Copy%20of%20Template%2023_Roster.xlsx?d=wf68f20e555ff4d49a7761eaf4fdaec52&amp;csf=1&amp;web=1&amp;e=i9BBGg
 
 ### Assumptions
 
